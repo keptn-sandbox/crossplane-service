@@ -5,7 +5,7 @@ FROM golang:1.16.2-alpine as builder
 
 RUN apk add --no-cache gcc libc-dev git
 
-WORKDIR /src/keptn-service-template-go
+WORKDIR /src/crossplane-service
 
 ARG version=develop
 ENV VERSION="${version}"
@@ -32,7 +32,7 @@ COPY . .
 
 # Build the command inside the container.
 # (You may fetch or manage dependencies here, either manually or with a tool like "godep".)
-RUN GOOS=linux go build -ldflags '-linkmode=external' $BUILDFLAGS -v -o keptn-service-template-go
+RUN GOOS=linux go build -ldflags '-linkmode=external' $BUILDFLAGS -v -o crossplane-service
 
 # Use a Docker multi-stage build to create a lean production image.
 # https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
@@ -41,6 +41,15 @@ ENV ENV=production
 
 # Install extra packages
 # See https://github.com/gliderlabs/docker-alpine/issues/136#issuecomment-272703023
+
+ARG KUBE_VERSION=1.20.0
+RUN wget -q https://storage.googleapis.com/kubernetes-release/release/v$KUBE_VERSION/bin/linux/amd64/kubectl -O /bin/kubectl && \
+  chmod +x /bin/kubectl
+
+ARG HELM_VERSION=3.6.3
+RUN wget -q https://get.helm.sh/helm-v$HELM_VERSION-linux-amd64.tar.gz && \
+	tar -zxvf helm-v$HELM_VERSION-linux-amd64.tar.gz && \
+	mv linux-amd64/helm /bin/helm
 
 RUN    apk update && apk upgrade \
 	&& apk add ca-certificates libc6-compat \
@@ -51,7 +60,7 @@ ARG version=develop
 ENV VERSION="${version}"
 
 # Copy the binary to the production image from the builder stage.
-COPY --from=builder /src/keptn-service-template-go/keptn-service-template-go /keptn-service-template-go
+COPY --from=builder /src/crossplane-service/crossplane-service /crossplane-service
 
 EXPOSE 8080
 
@@ -64,4 +73,4 @@ ENV GOTRACEBACK=all
 #build-uncomment ENTRYPOINT ["/entrypoint.sh"]
 
 # Run the web service on container startup.
-CMD ["/keptn-service-template-go"]
+CMD ["/crossplane-service"]

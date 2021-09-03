@@ -1,30 +1,67 @@
 ---
-# Deployment of our keptn-service-template-go
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keptn-crossplane-service
+  namespace: keptn
+  labels:
+    name: keptn-crossplane-service
+---
+# Source: openebs/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: keptn-crossplane-service
+  labels:
+    name: keptn-crossplane-service
+rules:
+- apiGroups: ["","cluster.civo.crossplane.io","devopstoolkitseries.com"]
+  resources: ["*"]
+  verbs: ["create","delete","get","list","patch","update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: keptn-crossplane-service
+  labels:
+    name: keptn-crossplane-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: keptn-crossplane-service
+subjects:
+- kind: ServiceAccount
+  name: keptn-crossplane-service
+  namespace: keptn
+---
+# Deployment of our crossplane-service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: keptn-service-template-go
+  name: crossplane-service
   namespace: keptn
 spec:
   selector:
     matchLabels:
-      run: keptn-service-template-go
+      run: crossplane-service
   replicas: 1
   template:
     metadata:
       labels:
-        run: keptn-service-template-go
+        run: crossplane-service
+        app.kubernetes.io/name: crossplane-service
+        app.kubernetes.io/version: dev
     spec:
       containers:
-        - name: keptn-service-template-go
-          image: keptnsandbox/keptn-service-template-go:latest # Todo: Replace this with your image name
+        - name: crossplane-service
+          image: keptnsandbox/crossplane-service # Todo: Replace this with your image name
           ports:
             - containerPort: 8080
           env:
             - name: CONFIGURATION_SERVICE
               value: 'http://configuration-service:8080'
         - name: distributor
-          image: keptn/distributor:0.8.3
+          image: keptn/distributor:0.8.7
           livenessProbe:
             httpGet:
               path: /health
@@ -45,23 +82,48 @@ spec:
             - name: PUBSUB_URL
               value: 'nats://keptn-nats-cluster'
             - name: PUBSUB_TOPIC
-              value: 'sh.keptn.>'
+              value: 'sh.keptn.event.environment-setup.>,sh.keptn.event.environment-teardown.>'
             - name: PUBSUB_RECIPIENT
               value: '127.0.0.1'
-      serviceAccountName: keptn-default
+            - name: VERSION
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: 'metadata.labels[''app.kubernetes.io/version'']'
+            - name: K8S_DEPLOYMENT_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: 'metadata.labels[''app.kubernetes.io/name'']'
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+      serviceAccountName: keptn-crossplane-service
 ---
-# Expose keptn-service-template-go via Port 8080 within the cluster
+# Expose crossplane-service via Port 8080 within the cluster
 apiVersion: v1
 kind: Service
 metadata:
-  name: keptn-service-template-go
+  name: crossplane-service
   namespace: keptn
   labels:
-    run: keptn-service-template-go
+    run: crossplane-service
 spec:
   ports:
     - port: 8080
       protocol: TCP
   selector:
-    run: keptn-service-template-go
+    run: crossplane-service
 

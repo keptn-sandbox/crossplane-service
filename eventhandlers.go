@@ -1,19 +1,28 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2" // make sure to use v2 cloudevents here
-	keptn "github.com/keptn/go-utils/pkg/lib"
 	keptnv2 "github.com/keptn/go-utils/pkg/lib/v0_2_0"
+	"gopkg.in/yaml.v2"
 )
 
 /**
 * Here are all the handler functions for the individual event
 * See https://github.com/keptn/spec/blob/0.8.0-alpha/cloudevents.md for details on the payload
 **/
+
+const helmVersion = "0.8.7"
 
 // GenericLogKeptnCloudEventHandler is a generic handler for Keptn Cloud Events that logs the CloudEvent
 func GenericLogKeptnCloudEventHandler(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data interface{}) error {
@@ -23,77 +32,9 @@ func GenericLogKeptnCloudEventHandler(myKeptn *keptnv2.Keptn, incomingEvent clou
 	return nil
 }
 
-// OldHandleConfigureMonitoringEvent handles old configure-monitoring events
-// TODO: add in your handler code
-func OldHandleConfigureMonitoringEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptn.ConfigureMonitoringEventData) error {
-	log.Printf("Handling old configure-monitoring Event: %s", incomingEvent.Context.GetID())
+func HandleEnvironmentSetupTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *EnvironmentsetupTriggeredEventData) error {
+	log.Printf("Handling environment-setup.triggered Event: %s", incomingEvent.Context.GetID())
 
-	return nil
-}
-
-// HandleConfigureMonitoringTriggeredEvent handles configure-monitoring.triggered events
-// TODO: add in your handler code
-func HandleConfigureMonitoringTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.ConfigureMonitoringTriggeredEventData) error {
-	log.Printf("Handling configure-monitoring.triggered Event: %s", incomingEvent.Context.GetID())
-
-	return nil
-}
-
-// HandleDeploymentTriggeredEvent handles deployment.triggered events
-// TODO: add in your handler code
-func HandleDeploymentTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.DeploymentTriggeredEventData) error {
-	log.Printf("Handling deployment.triggered Event: %s", incomingEvent.Context.GetID())
-
-	return nil
-}
-
-// HandleTestTriggeredEvent handles test.triggered events
-// TODO: add in your handler code
-func HandleTestTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.TestTriggeredEventData) error {
-	log.Printf("Handling test.triggered Event: %s", incomingEvent.Context.GetID())
-
-	return nil
-}
-
-// HandleApprovalTriggeredEvent handles approval.triggered events
-// TODO: add in your handler code
-func HandleApprovalTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.ApprovalTriggeredEventData) error {
-	log.Printf("Handling approval.triggered Event: %s", incomingEvent.Context.GetID())
-
-	return nil
-}
-
-// HandleEvaluationTriggeredEvent handles evaluation.triggered events
-// TODO: add in your handler code
-func HandleEvaluationTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.EvaluationTriggeredEventData) error {
-	log.Printf("Handling evaluation.triggered Event: %s", incomingEvent.Context.GetID())
-
-	return nil
-}
-
-// HandleReleaseTriggeredEvent handles release.triggered events
-// TODO: add in your handler code
-func HandleReleaseTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.ReleaseTriggeredEventData) error {
-	log.Printf("Handling release.triggered Event: %s", incomingEvent.Context.GetID())
-
-	return nil
-}
-
-// HandleGetSliTriggeredEvent handles get-sli.triggered events if SLIProvider == keptn-service-template-go
-// This function acts as an example showing how to handle get-sli events by sending .started and .finished events
-// TODO: adapt handler code to your needs
-func HandleGetSliTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.GetSLITriggeredEventData) error {
-	log.Printf("Handling get-sli.triggered Event: %s", incomingEvent.Context.GetID())
-
-	// Step 1 - Do we need to do something?
-	// Lets make sure we are only processing an event that really belongs to our SLI Provider
-	if data.GetSLI.SLIProvider != "keptn-service-template-go" {
-		log.Printf("Not handling get-sli event as it is meant for %s", data.GetSLI.SLIProvider)
-		return nil
-	}
-
-	// Step 2 - Send out a get-sli.started CloudEvent
-	// The get-sli.started cloud-event is new since Keptn 0.8.0 and is required to be send when the task is started
 	_, err := myKeptn.SendTaskStartedEvent(data, ServiceName)
 
 	if err != nil {
@@ -102,71 +43,208 @@ func HandleGetSliTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevent
 		return err
 	}
 
-	// Step 4 - prep-work
-	// Get any additional input / configuration data
-	// - Labels: get the incoming labels for potential config data and use it to pass more labels on result, e.g: links
-	// - SLI.yaml: if your service uses SLI.yaml to store query definitions for SLIs get that file from Keptn
-	labels := data.Labels
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-	testRunID := labels["testRunId"]
+	log.Printf("Looking for Crossplane cluster %s file in Keptn git repo...", CrossPlaneFilename)
 
-	// Step 5 - get SLI Config File
-	// Get SLI File from keptn-service-template-go subdirectory of the config repo - to add the file use:
-	//   keptn add-resource --project=PROJECT --stage=STAGE --service=SERVICE --resource=my-sli-config.yaml  --resourceUri=keptn-service-template-go/sli.yaml
-	sliFile := "keptn-service-template-go/sli.yaml"
-	sliConfigFileContent, err := myKeptn.GetKeptnResource(sliFile)
+	// load crossplane file
+	keptnResourceContent, err := myKeptn.GetKeptnResource(CrossPlaneFilename)
 
-	// FYI you do not need to "fail" if sli.yaml is missing, you can also assume smart defaults like we do
-	// in keptn-contrib/dynatrace-service and keptn-contrib/prometheus-service
 	if err != nil {
-		// failed to fetch sli config file
-		errMsg := fmt.Sprintf("Failed to fetch SLI file %s from config repo: %s", sliFile, err.Error())
-		log.Println(errMsg)
-		// send a get-sli.finished event with status=error and result=failed back to Keptn
+		logMessage := fmt.Sprintf("No %s file found for service %s in stage %s in project %s", CrossPlaneFilename, data.Service, data.Stage, data.Project)
+		log.Printf(logMessage)
 
 		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
-			Status: keptnv2.StatusErrored,
-			Result: keptnv2.ResultFailed,
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+
+		return err
+	}
+	log.Printf("Crossplane file found.")
+
+	// store crossplane file locally
+	_ = os.Mkdir("crossplane", 0644)
+	err = ioutil.WriteFile(CrossPlaneFilename, []byte(keptnResourceContent), 0644)
+	if err != nil {
+		logMessage := fmt.Sprintf("Could not store crossplane file locally: %s", err.Error())
+		log.Printf(logMessage)
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+
+		return err
+	}
+	log.Printf("Crossplane file stored locally.")
+
+	log.Printf("Now applying crossplane file.")
+	// now execute crossplane
+	kubectlresult, err := ExecuteCommand("kubectl", []string{"apply", "-f", CrossPlaneFilename})
+	log.Printf(kubectlresult)
+	if err != nil {
+		logMessage := fmt.Sprintf("Error while applying crossplane cluster manifest: %s", err.Error())
+		log.Printf(logMessage)
+
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+
+		return err
+	}
+	log.Printf("Crossplane file applied.")
+
+	// waiting for cluster to be ready
+	// wait for secret
+	var secretName string
+	secretDefaultName := "kubeconfig-keptn-crossplane"
+	secretNamespace := "crossplane-system"
+	// wait as usually the secret is not immediately available
+	time.Sleep(10 * time.Second)
+	for secretName != secretDefaultName {
+		log.Printf("Checking availability of secret %s in namespace %s", secretDefaultName, secretNamespace)
+		secretName, err = CheckAvailabilityOfSecret(secretDefaultName, secretNamespace)
+		log.Printf("Retrieved secret name: %s", secretName)
+
+		if err != nil {
+			logMessage := fmt.Sprintf("Could not retrieve secret %s yet - waiting for 30 seconds", secretDefaultName)
+			log.Printf(logMessage)
+
+			// we will consider this a
+			_, err = myKeptn.SendTaskStatusChangedEvent(&keptnv2.EventData{
+				Message: logMessage,
+			}, ServiceName)
+			if err != nil {
+				log.Printf("Error: %", err)
+			}
+			// interval before we check the chaosengine status again
+			time.Sleep(30 * time.Second)
+		}
+
+	}
+	log.Printf("Secret found. Continuing...")
+
+	// first getting the kubeconfig
+	// kubectl get secrets cluster-details-keptn-crossplane -n default -o jsonpath={'.data.kubeconfig'} | base64 -d > kubeconfig
+	kubeconfigEncoded, err := ExecuteCommand("kubectl", []string{"get", "secrets", secretName, "-n", secretNamespace, "-o", "jsonpath={.data.kubeconfig}"})
+	if err != nil {
+		logMessage := fmt.Sprintf("Error while getting kubeconfig: %s", err.Error())
+		log.Printf(logMessage)
+	}
+	log.Printf(kubeconfigEncoded)
+
+	kubeconfig, err := base64.StdEncoding.DecodeString(kubeconfigEncoded)
+	if err != nil {
+		logMessage := fmt.Sprintf("Could not base64 decode the Kubeconfig: %s", err.Error())
+		log.Printf(logMessage)
+		return err
+	}
+	err = ioutil.WriteFile("kubeconfig", kubeconfig, 0644)
+	if err != nil {
+		logMessage := fmt.Sprintf("Could not store kubeconfig file locally: %s", err.Error())
+		log.Printf(logMessage)
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
 		}, ServiceName)
 
 		return err
 	}
 
-	fmt.Println(sliConfigFileContent)
-
-	// Step 6 - do your work - iterate through the list of requested indicators and return their values
-	// Indicators: this is the list of indicators as requested in the SLO.yaml
-	// SLIResult: this is the array that will receive the results
-	indicators := data.GetSLI.Indicators
-	sliResults := []*keptnv2.SLIResult{}
-
-	for _, indicatorName := range indicators {
-		sliResult := &keptnv2.SLIResult{
-			Metric: indicatorName,
-			Value:  123.4, // ToDo: Fetch the values from your monitoring tool here
-		}
-		sliResults = append(sliResults, sliResult)
+	if string(kubeconfig) == "" {
+		logMessage := "KubeConfig is empty"
+		log.Printf(logMessage)
 	}
 
-	// Step 7 - add additional context via labels (e.g., a backlink to the monitoring or CI tool)
-	labels["Link to Data Source"] = "https://mydatasource/myquery?testRun=" + testRunID
+	// k get nodes --kubeconfig kubeconfig
+	nodes, err := ExecuteCommand("kubectl", []string{"get", "nodes", "--kubeconfig", "kubeconfig"})
+	if err != nil {
+		logMessage := fmt.Sprintf("Error while getting kubeconfig: %s", err.Error())
+		log.Printf(logMessage)
+	}
+	logMessage := nodes
+	log.Printf(logMessage)
 
-	// Step 8 - Build get-sli.finished event data
-	getSliFinishedEventData := &keptnv2.GetSLIFinishedEventData{
-		EventData: keptnv2.EventData{
-			Status: keptnv2.StatusSucceeded,
-			Result: keptnv2.ResultPass,
-		},
-		GetSLI: keptnv2.GetSLIFinished{
-			IndicatorValues: sliResults,
-			Start:           data.GetSLI.Start,
-			End:             data.GetSLI.End,
-		},
+	_, err = myKeptn.SendTaskStatusChangedEvent(&keptnv2.EventData{
+		Message: logMessage,
+	}, ServiceName)
+	if err != nil {
+		log.Printf("Error: %", err)
 	}
 
-	_, err = myKeptn.SendTaskFinishedEvent(getSliFinishedEventData, ServiceName)
+	// fetch values.yaml for helm-service
+	//helmVersion := "0.8.7"
+	fileUrl := "https://raw.githubusercontent.com/keptn/keptn/release-" + helmVersion + "/helm-service/chart/values.yaml"
+	err = DownloadFile("values.yaml", fileUrl)
+	if err != nil {
+		logMessage := fmt.Sprintf("Error while getting Helm values.yaml file: %s", err.Error())
+		log.Printf(logMessage)
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+	}
+	fmt.Println("Downloaded: " + fileUrl)
+	_, err = myKeptn.SendTaskStatusChangedEvent(&keptnv2.EventData{
+		Message: "Downloaded Helm-service values.yaml file",
+	}, ServiceName)
+
+	var helmValues helmValues
+	helmValues.getHelmValues("values.yaml")
+	helmValues.Helmservice.Image.Tag = helmVersion
+	helmValues.RemoteControlPlane.Enabled = true
+	helmValues.RemoteControlPlane.API.Protocol = "http"
+	helmValues.RemoteControlPlane.API.Hostname = "34.67.191.73.nip.io"
+	helmValues.RemoteControlPlane.API.Token = "wcw3YyJRBrS2OzziQKIZt3zzUSQMC4oSessgPhgPnwNIy"
+
+	// now write the file
+	helmData, err := yaml.Marshal(&helmValues)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = ioutil.WriteFile("values.yaml", helmData, 0)
+	if err != nil {
+		logMessage := fmt.Sprintf("Error while writing Helm values.yaml file: %s", err.Error())
+		log.Printf(logMessage)
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+	}
+	log.Printf("Helm values.yaml stored locally.")
+
+	// now apply helm chart with values file
+	// helm install helm-service https://github.com/keptn/keptn/releases/download/0.8.7/helm-service-0.8.7.tgz -n keptn-exec --create-namespace --values=values.yaml --kubeconfig kubeconfig
+	// TEMP DISABLE
+	log.Printf("Now installing Helm service.")
+	helmRelease := "https://github.com/keptn/keptn/releases/download/" + helmVersion + "/helm-service-" + helmVersion + ".tgz"
+	helmInstall, err := ExecuteCommand("helm", []string{"install", "helm-service", helmRelease, "-n", "keptn-exec", "--create-namespace", "--values=values.yaml", "--kubeconfig", "kubeconfig"})
+	if err != nil {
+		logMessage := fmt.Sprintf("Error while installing Keptn helm-service: %s", err.Error())
+		log.Printf(logMessage)
+	}
+	logMessage = helmInstall
+	log.Printf(logMessage)
+
+	_, err = myKeptn.SendTaskStatusChangedEvent(&keptnv2.EventData{
+		Message: logMessage,
+	}, ServiceName)
+	if err != nil {
+		log.Printf("Error: %", err)
+	}
+	// END TEMP DISABLE
+
+	_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+		Status: keptnv2.StatusSucceeded,
+		Result: keptnv2.ResultPass,
+	}, ServiceName)
 
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to send task finished CloudEvent (%s), aborting...", err.Error())
@@ -177,48 +255,134 @@ func HandleGetSliTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevent
 	return nil
 }
 
-// HandleProblemEvent handles two problem events:
-// - ProblemOpenEventType = "sh.keptn.event.problem.open"
-// - ProblemEventType = "sh.keptn.events.problem"
-// TODO: add in your handler code
-func HandleProblemEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptn.ProblemEventData) error {
-	log.Printf("Handling Problem Event: %s", incomingEvent.Context.GetID())
+func HandleEnvironmentTeardownTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *EnvironmentTeardownTriggeredEventData) error {
+	log.Printf("Handling environment-teardown.triggered Event: %s", incomingEvent.Context.GetID())
 
-	// Deprecated since Keptn 0.7.0 - use the HandleActionTriggeredEvent instead
+	_, err := myKeptn.SendTaskStartedEvent(data, ServiceName)
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to send task started CloudEvent (%s), aborting...", err.Error())
+		log.Println(errMsg)
+		return err
+	}
+
+	log.Printf("Looking for Crossplane cluster %s file in Keptn git repo...", CrossPlaneFilename)
+
+	// load crossplane file
+	keptnResourceContent, err := myKeptn.GetKeptnResource(CrossPlaneFilename)
+
+	if err != nil {
+		logMessage := fmt.Sprintf("No %s file found for service %s in stage %s in project %s", CrossPlaneFilename, data.Service, data.Stage, data.Project)
+		log.Printf(logMessage)
+
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+
+		return err
+	}
+	log.Printf("Crossplane file found.")
+
+	// store crossplane file locally
+	_ = os.Mkdir("crossplane", 0644)
+	err = ioutil.WriteFile(CrossPlaneFilename, []byte(keptnResourceContent), 0644)
+	if err != nil {
+		logMessage := fmt.Sprintf("Could not store crossplane file locally: %s", err.Error())
+		log.Printf(logMessage)
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+
+		return err
+	}
+	log.Printf("Crossplane file stored locally.")
+
+	log.Printf("Now starting to delete cluster based on crossplane file.")
+	// now execute crossplane
+	kubectlresult, err := ExecuteCommand("kubectl", []string{"delete", "-f", CrossPlaneFilename})
+	log.Printf(kubectlresult)
+	if err != nil {
+		logMessage := fmt.Sprintf("Error while deleting crossplane cluster manifest: %s", err.Error())
+		log.Printf(logMessage)
+
+		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+			Status:  keptnv2.StatusErrored,
+			Result:  keptnv2.ResultFailed,
+			Message: logMessage,
+		}, ServiceName)
+
+		return err
+	}
+	log.Printf("Crossplane cluster deleted.")
+
+	_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
+		Status: keptnv2.StatusSucceeded,
+		Result: keptnv2.ResultPass,
+	}, ServiceName)
+
+	if err != nil {
+		errMsg := fmt.Sprintf("Failed to send task finished CloudEvent (%s), aborting...", err.Error())
+		log.Println(errMsg)
+		return err
+	}
 
 	return nil
 }
 
-// HandleActionTriggeredEvent handles action.triggered events
-// TODO: add in your handler code
-func HandleActionTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data *keptnv2.ActionTriggeredEventData) error {
-	log.Printf("Handling Action Triggered Event: %s", incomingEvent.Context.GetID())
-	log.Printf("Action=%s\n", data.Action.Action)
-
-	// check if action is supported
-	if data.Action.Action == "action-xyz" {
-		// -----------------------------------------------------
-		// 1. Send Action.Started Cloud-Event
-		// -----------------------------------------------------
-		myKeptn.SendTaskStartedEvent(data, ServiceName)
-
-		// -----------------------------------------------------
-		// 2. Implement your remediation action here
-		// -----------------------------------------------------
-		time.Sleep(5 * time.Second) // Example: Wait 5 seconds. Maybe the problem fixes itself.
-
-		// -----------------------------------------------------
-		// 3. Send Action.Finished Cloud-Event
-		// -----------------------------------------------------
-		myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
-			Status:  keptnv2.StatusSucceeded, // alternative: keptnv2.StatusErrored
-			Result:  keptnv2.ResultPass,      // alternative: keptnv2.ResultFailed
-			Message: "Successfully sleeped!",
-		}, ServiceName)
-
-	} else {
-		log.Printf("Retrieved unknown action %s, skipping...", data.Action.Action)
-		return nil
+// ExecuteCommand exectues the command using the args
+func ExecuteCommand(command string, args []string) (string, error) {
+	cmd := exec.Command(command, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("Error executing command %s %s: %s\n%s", command, strings.Join(args, " "), err.Error(), string(out))
 	}
-	return nil
+	return string(out), nil
+}
+
+func DownloadFile(filepath string, url string) error {
+
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func CheckAvailabilityOfSecret(secretname string, namespace string) (string, error) {
+	secretname, err := ExecuteCommand("kubectl", []string{"get", "secrets", secretname, "-n", namespace, "-o", "jsonpath='{.metadata.name}'"})
+
+	if err != nil {
+		return "", err
+	}
+
+	return strings.Trim(secretname, "'"), nil
+}
+
+func (hv *helmValues) getHelmValues(filename string) *helmValues {
+
+	yamlFile, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Printf("yamlFile.Get err   #%v ", err)
+	}
+	err = yaml.Unmarshal(yamlFile, hv)
+	if err != nil {
+		log.Fatalf("Unmarshal: %v", err)
+	}
+
+	return hv
 }
