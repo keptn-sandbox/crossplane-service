@@ -29,7 +29,7 @@ type envConfig struct {
 // ServiceName specifies the current services name (e.g., used as source when sending CloudEvents)
 const ServiceName = "crossplane-service"
 
-// path for the crossplane file that will be applied
+// CrossPlaneFilename is the path for the crossplane file that will be applied
 const CrossPlaneFilename = "crossplane/cluster.yaml"
 
 // EnvironemtsetupFinishedEventData is the name of an echo triggered event
