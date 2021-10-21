@@ -1,0 +1,26 @@
+apiVersion: v2
+actions:
+  - name: "k6-test"
+    events:
+      - name: "sh.keptn.event.test.triggered"
+    tasks:
+      - name: "k6"
+        files:
+          - k6
+        image: "loadimpact/k6"
+        cmd:
+          - sh
+        args:
+          - /keptn/k6/run-test.sh
+  - name: "setup-monitoring"
+    events:
+      - name: "sh.keptn.event.monitoring-setup.triggered"
+    tasks:
+      - name: "monitoring"
+        files:
+          - prometheus
+        image: "jetzlstorfer/setup-monitoring:0.1"
+        cmd:
+          - sh
+        args:
+          - /keptn/prometheus/setup.sh

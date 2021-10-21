@@ -1,0 +1,2 @@
+deploymentURIsLocal:
+  - http://helloservice.crossplane-perf-test:80

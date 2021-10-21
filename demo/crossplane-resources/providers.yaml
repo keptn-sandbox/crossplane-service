@@ -1,0 +1,17 @@
+---
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-civo
+spec:
+  package: crossplane/provider-civo:main
+
+---
+
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-helm
+spec:
+  package: crossplane/provider-helm:v0.7.0

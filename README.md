@@ -41,6 +41,10 @@ In the example, the created cluster is already equipped with additional Keptn se
 
 ## Demo
 
+Instructions how to install Crossplane can be found here: https://crossplane.io/docs/v1.4/getting-started/install-configure.html 
+
+Instructions how to install the Crossplane Civo Provider can found here: https://github.com/crossplane-contrib/provider-civo 
+
 Please find demo resources in the `demo/` folder of this repo.
 
 
