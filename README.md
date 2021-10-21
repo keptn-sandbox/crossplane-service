@@ -1,33 +1,49 @@
-# README
+# Crossplane Service
 
-# WORK IN PROGRESS
-
-This is a Keptn Service Template written in GoLang. Follow the instructions below for writing your own Keptn integration.
-
-Quick start:
-
-1. In case you want to contribute your service to keptn-sandbox or keptn-contrib, make sure you have read and understood the [Contributing Guidelines](https://github.com/keptn-sandbox/contributing).
-1. Click [Use this template](https://github.com/keptn-sandbox/crossplane-service/generate) on top of the repository, or download the repo as a zip-file, extract it into a new folder named after the service you want to create (e.g., simple-service) 
-1. Replace every occurrence of (docker) image names and tags from `keptnsandbox/crossplane-service` to your docker organization and image name (e.g., `yourorganization/simple-service`)
-1. Replace every occurrence of `crossplane-service` with the name of your service (e.g., `simple-service`)
-1. Optional (but recommended): Create a git repo (e.g., on `github.com/your-username/simple-service`)
-1. Àdapt the [go.mod](go.mod) file and change `example.com/` to the actual package name (e.g., `github.com/your-username/simple-service`)
-1. Add yourself to the [CODEOWNERS](CODEOWNERS) file
-1. Initialize a git repository: 
-  * `git init .`
-  * `git add .`
-  * `git commit -m "Initial Commit"`
-1. Optional: Push your code an upstream git repo (e.g., GitHub) and adapt all links that contain `github.com` (e.g., to `github.com/your-username/simple-service`)
-1. Figure out whether your Kubernetes Deployment requires [any RBAC rules or a different service-account](https://github.com/keptn-sandbox/contributing#rbac-guidelines), and adapt [deploy/service.yaml](deploy/service.yaml) accordingly (initial setup is `serviceAccountName: keptn-default`).
-1. Last but not least: Remove this intro within the README file and make sure the README file properly states what this repository is about
-
----
-
-# crossplane-service
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/keptn-sandbox/crossplane-service)
 [![Go Report Card](https://goreportcard.com/badge/github.com/keptn-sandbox/crossplane-service)](https://goreportcard.com/report/github.com/keptn-sandbox/crossplane-service)
 
-This implements a crossplane-service for Keptn. If you want to learn more about Keptn visit us on [keptn.sh](https://keptn.sh)
+
+This service interacts with [Crossplane](https://crossplane.io) to manage infrastructure via declarative YAML files. 
+The current implementation aims to create Kubernetes clusters on demand via Crossplane (triggered by Keptn) and to delete the clusters (also triggered via Keptn).
+Therefore, the services makes us of two kind of Keptn cloud events:
+
+- `sh.keptn.event.environment-setup.triggered`: to initiate the setup/creation of a new environment (cluster)
+- `sh.keptn.event.environment-teardown.triggered`: to initiate the teardown/deletion of an environment (cluster)
+
+A simple shipyard that makes use of this:
+```
+apiVersion: "spec.keptn.sh/0.2.0"
+kind: "Shipyard"
+metadata:
+  name: "keptn-crossplane"
+spec:
+  stages:
+    - name: "perf-test"
+      sequences:
+        - name: "delivery"
+          tasks:
+            - name: "environment-setup"
+              properties:
+                size: "medium"
+            - name: "deployment"
+              properties:
+                deploymentstrategy: "user_managed"
+            - name: "test"
+              properties:
+                teststrategy: "performance"
+            - name: "evaluation"
+             - name: "environment-teardown"
+```
+
+The `crossplane-service` will look for a resource `crossplane/cluster.yaml` in the Keptn managed git-repository and will basically execute a `kubectl apply` or `kubectl delete` on this resource to either create or delete the cluster.
+In the example, the created cluster is already equipped with additional Keptn services, such as the [job-executor](https://github.com/keptn-sandbox/job-executor-service) and the [helm-service](https://github.com/keptn/keptn/tree/master/helm-service). 
+
+## Demo
+
+Please find demo resources in the `demo/` folder of this repo.
+
+
 
 ## Compatibility Matrix
 
@@ -35,9 +51,8 @@ This implements a crossplane-service for Keptn. If you want to learn more about 
 
 | Keptn Version    | [crossplane-service Docker Image](https://hub.docker.com/r/keptnsandbox/crossplane-service/tags) |
 |:----------------:|:----------------------------------------:|
-|       0.6.1      | keptnsandbox/crossplane-service:0.1.0 |
-|       0.7.1      | keptnsandbox/crossplane-service:0.1.1 |
-|       0.7.2      | keptnsandbox/crossplane-service:0.1.2 |
+|       0.9.2      | keptnsandbox/crossplane-service:0.1.0 under development |
+
 
 ## Installation
 
