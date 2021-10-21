@@ -22,8 +22,6 @@ import (
 * See https://github.com/keptn/spec/blob/0.8.0-alpha/cloudevents.md for details on the payload
 **/
 
-const helmVersion = "0.8.7"
-
 // GenericLogKeptnCloudEventHandler is a generic handler for Keptn Cloud Events that logs the CloudEvent
 func GenericLogKeptnCloudEventHandler(myKeptn *keptnv2.Keptn, incomingEvent cloudevents.Event, data interface{}) error {
 	log.Printf("Handling %s Event: %s", incomingEvent.Type(), incomingEvent.Context.GetID())
@@ -80,8 +78,8 @@ func HandleEnvironmentSetupTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent 
 
 	log.Printf("Now applying crossplane file.")
 	// now execute crossplane
-	kubectlresult, err := ExecuteCommand("kubectl", []string{"apply", "-f", CrossPlaneFilename})
-	log.Printf(kubectlresult)
+	_, err = ExecuteCommand("kubectl", []string{"apply", "-f", CrossPlaneFilename})
+
 	if err != nil {
 		logMessage := fmt.Sprintf("Error while applying crossplane cluster manifest: %s", err.Error())
 		log.Printf(logMessage)
@@ -117,7 +115,7 @@ func HandleEnvironmentSetupTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent 
 				Message: logMessage,
 			}, ServiceName)
 			if err != nil {
-				log.Printf("Error: %", err)
+				log.Printf("Error: %s", err)
 			}
 			// interval before we check the chaosengine status again
 			time.Sleep(30 * time.Second)
@@ -133,7 +131,7 @@ func HandleEnvironmentSetupTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent 
 		logMessage := fmt.Sprintf("Error while getting kubeconfig: %s", err.Error())
 		log.Printf(logMessage)
 	}
-	log.Printf(kubeconfigEncoded)
+	//log.Printf(kubeconfigEncoded)
 
 	kubeconfig, err := base64.StdEncoding.DecodeString(kubeconfigEncoded)
 	if err != nil {
@@ -172,74 +170,8 @@ func HandleEnvironmentSetupTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent 
 		Message: logMessage,
 	}, ServiceName)
 	if err != nil {
-		log.Printf("Error: %", err)
+		log.Printf("Error: %s", err)
 	}
-
-	// fetch values.yaml for helm-service
-	//helmVersion := "0.8.7"
-	fileUrl := "https://raw.githubusercontent.com/keptn/keptn/release-" + helmVersion + "/helm-service/chart/values.yaml"
-	err = DownloadFile("values.yaml", fileUrl)
-	if err != nil {
-		logMessage := fmt.Sprintf("Error while getting Helm values.yaml file: %s", err.Error())
-		log.Printf(logMessage)
-		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
-			Status:  keptnv2.StatusErrored,
-			Result:  keptnv2.ResultFailed,
-			Message: logMessage,
-		}, ServiceName)
-	}
-	fmt.Println("Downloaded: " + fileUrl)
-	_, err = myKeptn.SendTaskStatusChangedEvent(&keptnv2.EventData{
-		Message: "Downloaded Helm-service values.yaml file",
-	}, ServiceName)
-
-	var helmValues helmValues
-	helmValues.getHelmValues("values.yaml")
-	helmValues.Helmservice.Image.Tag = helmVersion
-	helmValues.RemoteControlPlane.Enabled = true
-	helmValues.RemoteControlPlane.API.Protocol = "http"
-	helmValues.RemoteControlPlane.API.Hostname = "34.67.191.73.nip.io"
-	helmValues.RemoteControlPlane.API.Token = "wcw3YyJRBrS2OzziQKIZt3zzUSQMC4oSessgPhgPnwNIy"
-
-	// now write the file
-	helmData, err := yaml.Marshal(&helmValues)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = ioutil.WriteFile("values.yaml", helmData, 0)
-	if err != nil {
-		logMessage := fmt.Sprintf("Error while writing Helm values.yaml file: %s", err.Error())
-		log.Printf(logMessage)
-		_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
-			Status:  keptnv2.StatusErrored,
-			Result:  keptnv2.ResultFailed,
-			Message: logMessage,
-		}, ServiceName)
-	}
-	log.Printf("Helm values.yaml stored locally.")
-
-	// now apply helm chart with values file
-	// helm install helm-service https://github.com/keptn/keptn/releases/download/0.8.7/helm-service-0.8.7.tgz -n keptn-exec --create-namespace --values=values.yaml --kubeconfig kubeconfig
-	// TEMP DISABLE
-	log.Printf("Now installing Helm service.")
-	helmRelease := "https://github.com/keptn/keptn/releases/download/" + helmVersion + "/helm-service-" + helmVersion + ".tgz"
-	helmInstall, err := ExecuteCommand("helm", []string{"install", "helm-service", helmRelease, "-n", "keptn-exec", "--create-namespace", "--values=values.yaml", "--kubeconfig", "kubeconfig"})
-	if err != nil {
-		logMessage := fmt.Sprintf("Error while installing Keptn helm-service: %s", err.Error())
-		log.Printf(logMessage)
-	}
-	logMessage = helmInstall
-	log.Printf(logMessage)
-
-	_, err = myKeptn.SendTaskStatusChangedEvent(&keptnv2.EventData{
-		Message: logMessage,
-	}, ServiceName)
-	if err != nil {
-		log.Printf("Error: %", err)
-	}
-	// END TEMP DISABLE
 
 	_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
 		Status: keptnv2.StatusSucceeded,
