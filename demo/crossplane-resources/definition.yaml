@@ -1,0 +1,200 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: compositeclusters.devopstoolkitseries.com
+spec:
+  connectionSecretKeys:
+  - kubeconfig
+  defaultCompositionRef:
+    name: cluster-civo
+  group: devopstoolkitseries.com
+  names:
+    kind: CompositeCluster
+    plural: compositeclusters
+  claimNames:
+    kind: ClusterClaim
+    plural: clusterclaims
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              id:
+                type: string
+                description: ID of this Cluster that other objects will use to refer to it.
+              parameters:
+                type: object
+                properties:
+                  version:
+                    description: The Kubernetes version for the cluster.
+                    type: string
+                  nodeSize:
+                    description: The size of the nodes; small, medium, large
+                    type: string
+                  minNodeCount:
+                    description: The minimum number of nodes
+                    type: integer
+                    default: 1
+                required:
+                - nodeSize
+            required:
+            - id
+            - parameters
+          status:
+            type: object
+            properties:
+              clusterName:
+                description: The name of the cluster
+                type: string
+              controlPlaneStatus:
+                description: The status of the control plane
+                type: string
+              nodePoolStatus:
+                description: The status of the node pool
+                type: string
+    additionalPrinterColumns:
+    - name: clusterName
+      type: string
+      jsonPath: ".status.clusterName"
+    - name: controlPlane
+      type: string
+      jsonPath: ".status.controlPlaneStatus"
+    - name: nodePool
+      type: string
+      jsonPath: ".status.nodePoolStatus"
+
+---
+
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: cluster-civo
+  labels:
+    provider: civo
+    cluster: ck
+spec:
+  compositeTypeRef:
+    apiVersion: devopstoolkitseries.com/v1alpha1
+    kind: CompositeCluster
+  writeConnectionSecretsToNamespace: crossplane-system
+  patchSets:
+  - name: metadata
+    patches:
+    - fromFieldPath: metadata.labels
+  resources:
+  - name: civocluster
+    base:
+      apiVersion: cluster.civo.crossplane.io/v1alpha1
+      kind: CivoKubernetes
+      spec:
+        instances: 1
+        size: g3.k3s.small
+        connectionDetails:
+          connectionSecretNamespace: crossplane-system
+          connectionSecretNamePrefix: kubeconfig
+        providerConfigRef:
+          name: provider-civo
+    patches:
+    - fromFieldPath: spec.id
+      toFieldPath: metadata.name
+    - fromFieldPath: spec.id
+      toFieldPath: spec.name
+    - fromFieldPath: spec.parameters.minNodeCount
+      toFieldPath: spec.instances
+    - fromFieldPath: spec.parameters.nodeSize
+      toFieldPath: spec.size
+      transforms:
+        - type: map
+          map:
+            small: g3.k3s.small
+            medium: g3.k3s.medium
+            large: g3.k3s.xlarge
+  - name: helm
+    base:
+      apiVersion: helm.crossplane.io/v1beta1
+      kind: ProviderConfig
+      spec:
+        credentials:
+          source: Secret
+          secretRef:
+            key: kubeconfig
+    patches:
+    - fromFieldPath: spec.id
+      toFieldPath: metadata.name
+    - fromFieldPath: spec.writeConnectionSecretToRef.namespace
+      toFieldPath: spec.credentials.secretRef.namespace
+    - fromFieldPath: spec.id
+      toFieldPath: spec.credentials.secretRef.name
+      transforms:
+        - type: string
+          string:
+            fmt: "kubeconfig-%s"
+    readinessChecks:
+      - type: None
+  - name: keptn-helm-service
+    base:
+      apiVersion: helm.crossplane.io/v1beta1
+      kind: Release
+      spec:
+        rollbackLimit: 3
+        forProvider:
+          namespace: keptn-exec
+          chart:
+            # name: helm-service
+            url: https://github.com/keptn/keptn/releases/download/0.9.2/helm-service-0.9.2.tgz
+          valuesFrom:
+          - secretKeyRef:
+              key: helmservice-values.yaml
+              name: helmservice-values
+              namespace: keptn
+              optional: false
+    patches:
+    - fromFieldPath: spec.id
+      toFieldPath: spec.providerConfigRef.name
+  # - name: keptn-locust-service
+  #   base:
+  #     apiVersion: helm.crossplane.io/v1beta1
+  #     kind: Release
+  #     spec:
+  #       rollbackLimit: 3
+  #       forProvider:
+  #         namespace: keptn-exec
+  #         chart:
+  #           # name: helm-service
+  #           url: https://github.com/keptn-sandbox/locust-service/releases/download/0.1.5/locust-service-0.1.5.tgz
+  #         valuesFrom:
+  #         - secretKeyRef:
+  #             key: locustservice-values.yaml
+  #             name: locustservice-values
+  #             namespace: keptn
+  #             optional: false
+  #   patches:
+  #   - fromFieldPath: spec.id
+  #     toFieldPath: spec.providerConfigRef.name
+  - name: keptn-job-executor
+    base:
+      apiVersion: helm.crossplane.io/v1beta1
+      kind: Release
+      spec:
+        rollbackLimit: 3
+        forProvider:
+          namespace: keptn-exec
+          chart:
+            # name: helm-service
+            url: https://github.com/keptn-sandbox/job-executor-service/releases/download/0.1.3/job-executor-service-0.1.3.tgz
+          valuesFrom:
+          - secretKeyRef:
+              key: jobexecutor-values.yaml
+              name: jobexecutor-values
+              namespace: keptn
+              optional: false
+    patches:
+    - fromFieldPath: spec.id
+      toFieldPath: spec.providerConfigRef.name
+

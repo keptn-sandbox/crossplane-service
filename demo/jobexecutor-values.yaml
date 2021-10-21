@@ -1,0 +1,72 @@
+jobexecutorservice:
+  image:
+    repository: docker.io/keptnsandbox/job-executor-service # Container Image Name
+    pullPolicy: Always                       # Kubernetes Image Pull Policy
+    tag: "0.1.3"                                  # Container Tag
+  service:
+    enabled: true                            # Creates a Kubernetes Service for the job-executor-service
+
+jobexecutorserviceinitcontainer:
+  image:
+    repository: docker.io/keptnsandbox/job-executor-service-initcontainer # Container Image Name
+    tag: "0.1.3"                                                               # Container Tag
+
+distributor:
+  stageFilter: "perf-test"                            # Sets the stage this helm service belongs to
+  serviceFilter: ""                          # Sets the service this helm service belongs to
+  projectFilter: "crossplane"                          # Sets the project this helm service belongs to
+  image:
+    repository: docker.io/keptn/distributor  # Container Image Name
+    pullPolicy: IfNotPresent                 # Kubernetes Image Pull Policy
+    tag: "0.8.4"                             # Container Tag
+
+remoteControlPlane:
+  enabled: true                             # Enables remote execution plane mode
+  api:
+    protocol: "http"                        # Used Protocol (http, https)
+    hostname: "myIP.nip.io"                             # Hostname of the control plane cluster (and Port)
+    apiValidateTls: true                     # Defines if the control plane certificate should be validated
+    token: "myTOKEN"                                # Keptn API Token
+
+localControlPlane:
+  configurationServiceApi:
+    protocol: "http"                         # Used Protocol (http, https)
+    namespace: "keptn"                       # Namespace the keptn configuration service is in
+    service: "configuration-service"         # The name of the k8s service of the configuration-service
+    port: "8080"                             # The port which is exposed by the k8s service of the configuration-service
+    token: ""                                # Keptn API Token
+
+imagePullSecrets: [ ]                        # Secrets to use for container registry credentials
+
+serviceAccount:
+  create: true                               # Enables the service account creation
+  annotations: { }                           # Annotations to add to the service account
+  name: ""                                   # The name of the service account to use.
+
+config:
+  storageClassName: "gp2"
+  storageVolumeName: "job-executor-service-git-volume"
+
+podAnnotations: { }                           # Annotations to add to the created pods
+
+podSecurityContext: { }                       # Set the pod security context (e.g. fsGroups)
+# fsGroup: 2000
+
+securityContext: { }                          # Set the security context (e.g. runAsUser)
+#  readOnlyRootFilesystem: true
+#  runAsNonRoot: true
+#  runAsUser: 1000
+
+resources: # Resource limits and requests
+  limits:
+    cpu: 1
+    memory: 512Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+nodeSelector: { }                                # Node selector configuration
+
+tolerations: [ ]                                 # Tolerations for the pods
+
+affinity: { }                                    # Affinity rules

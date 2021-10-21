@@ -1,0 +1,11 @@
+apiVersion: devopstoolkitseries.com/v1alpha1
+kind: CompositeCluster
+metadata:
+  name: devops-toolkit
+spec:
+  id: devops-toolkit
+  compositionRef:
+    name: cluster-civo
+  parameters:
+    nodeSize: small
+    minNodeCount: 1

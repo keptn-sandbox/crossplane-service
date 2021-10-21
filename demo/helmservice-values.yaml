@@ -1,0 +1,55 @@
+helmservice:
+  image:
+    repository: docker.io/keptn/helm-service # Container Image Name
+    pullPolicy: IfNotPresent                 # Kubernetes Image Pull Policy
+    tag: "0.9.0"                                  # Container Tag
+  service:
+    enabled: true                            # Creates a Kubernetes Service for the helm-service
+
+distributor:
+  stageFilter: "perf-test"                            # Sets the stage this helm service belongs to
+  serviceFilter: ""                          # Sets the service this helm service belongs to
+  projectFilter: "crossplane"                          # Sets the project this helm service belongs to
+  image:
+    repository: docker.io/keptn/distributor  # Container Image Name
+    pullPolicy: IfNotPresent                 # Kubernetes Image Pull Policy
+    tag: "0.9.0"                                  # Container Tag
+
+remoteControlPlane:
+  enabled: true                             # Enables remote execution plane mode
+  api:
+    protocol: "http"                        # Used Protocol (http, https)
+    hostname: "myIP.nip.io"                             # Hostname of the control plane cluster (and Port)
+    apiValidateTls: true                     # Defines if the control plane certificate should be validated
+    token: "myTOKEN"                                # Keptn API Token
+
+imagePullSecrets: []                         # Secrets to use for container registry credentials
+
+serviceAccount:
+  create: true                               # Enables the service account creation
+  annotations: {}                            # Annotations to add to the service account
+  name: ""                                   # The name of the service account to use.
+
+podAnnotations: {}                           # Annotations to add to the created pods
+
+podSecurityContext: {}                       # Set the pod security context (e.g. fsGroups)
+  # fsGroup: 2000
+
+securityContext: {}                          # Set the security context (e.g. runAsUser)
+#  readOnlyRootFilesystem: true
+#  runAsNonRoot: true
+#  runAsUser: 1000
+
+resources:                                  # Resource limits and requests
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+nodeSelector: {}                                # Node selector configuration
+
+tolerations: []                                 # Tolerations for the pods
+
+affinity: {}                                    # Affinity rules
