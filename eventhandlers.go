@@ -115,7 +115,7 @@ func HandleEnvironmentSetupTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent 
 				Message: logMessage,
 			}, ServiceName)
 			if err != nil {
-				log.Printf("Error: %", err)
+				log.Printf("Error: %s", err)
 			}
 			// interval before we check the chaosengine status again
 			time.Sleep(30 * time.Second)
@@ -170,7 +170,7 @@ func HandleEnvironmentSetupTriggeredEvent(myKeptn *keptnv2.Keptn, incomingEvent 
 		Message: logMessage,
 	}, ServiceName)
 	if err != nil {
-		log.Printf("Error: %", err)
+		log.Printf("Error: %s", err)
 	}
 
 	_, err = myKeptn.SendTaskFinishedEvent(&keptnv2.EventData{
